@@ -1,0 +1,74 @@
+import pandas as pd
+from pulp import *
+
+# importing correlations
+df = pd.DataFrame({'Variables': ['x1', 'x2', 'x3', 'x4'],
+                   'Corr1': [0.25, 0.25, 0.25, 0.25],
+                   'Corr2': [0.25, -0.25, 0.25, -0.25],
+                   'Corr3': [0.25, 0.25, -0.25, -0.25]})
+
+# importing the file with data
+df2 = pd.read_csv('datafile.csv', delimiter=';')
+
+# converting data series to lists
+data1 = list(df2['Data1'])
+data2 = list(df2['Data2'])
+data3 = list(df2['Data3'])
+
+# defining the dictionary for output file
+output = dict()
+
+# flag to add headers to the first row in the output file
+first = True
+
+for x in range(len(data1)):
+    print(f'Iteration: {x+1}')
+    data1[x] = float(data1[x].replace(',', '.'))
+    data2[x] = float(data2[x].replace(',', '.'))
+    data3[x] = float(data3[x].replace(',', '.'))
+
+    # goal - minimizing the object of optimization
+    prob = LpProblem('Goal', LpMinimize)
+
+    # converting series to the list with variables
+    var_list = list(df['Variables'])
+
+    # converting list and series to dict
+    corr1 = dict(zip(var_list, df['Corr1']))
+    corr2 = dict(zip(var_list, df['Corr2']))
+    corr3 = dict(zip(var_list, df['Corr3']))
+
+    # adding variables to the model, setting the minimum value
+    model = LpVariable.dicts('Variables', var_list, lowBound=data1[x] - data2[x] - data3[x], cat='Integar')
+
+    # variables equation
+    prob += lpSum([model[i] for i in var_list])
+
+    # constraints
+    prob += lpSum([model[i] * corr1[i] for i in var_list]) == data1[x], 'Corr1'
+    prob += lpSum([model[i] * corr2[i] for i in var_list]) == data2[x], 'Corr2'
+    prob += lpSum([model[i] * corr3[i] for i in var_list]) == data3[x], 'Corr3'
+
+    # solving the model
+    prob.solve()
+
+    # printing results
+    value(prob.objective)
+    for var in prob.variables():
+        
+        # saving results to the dictionary
+        output[var.name] = var.varValue
+
+    # converting dictionary to dataframe
+    df3 = pd.DataFrame([output])
+
+    # saving the dataframe to .csv file
+    if first:
+        df3.to_csv('output.csv', mode='a', header=True)
+        first = False
+    else:
+        df3.to_csv('output.csv', mode='a', header=False)
+
+    # memory cleanup
+    del model
+    del prob
